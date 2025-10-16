@@ -1,0 +1,184 @@
+{
+  "info": {
+    "name": "Traffic Tech Backend Template",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ping"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('status ok', function () { pm.expect(json.status).to.eql('ok'); });",
+                  "pm.test('message pong', function () { pm.expect(json.message).to.eql('pong'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Calculator",
+      "item": [
+        {
+          "name": "Add",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"a\": {{a}},\n  \"b\": {{b}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/calculator/add",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "calculator",
+                "add"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const expectedStatus = pm.iterationData.get('expectStatus') || 200;",
+                  "pm.test('status as expected', function () { pm.response.to.have.status(expectedStatus); });",
+                  "if (expectedStatus === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('has result', function () { pm.expect(json).to.have.property('result'); });",
+                  "  const expected = pm.iterationData.get('expected');",
+                  "  if (typeof expected !== 'undefined') { pm.test('result ~ expected', function () { const delta = Math.abs(json.result - expected); pm.expect(delta).to.be.below(1e-9); }); }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subtract",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"a\": {{a}},\n  \"b\": {{b}}\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/calculator/subtract",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "v1", "calculator", "subtract" ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "const expectedStatus = pm.iterationData.get('expectStatus') || 200;",
+                "pm.test('status as expected', function () { pm.response.to.have.status(expectedStatus); });",
+                "if (expectedStatus === 200) { const json = pm.response.json(); const expected = pm.iterationData.get('expected'); if (typeof expected !== 'undefined') { pm.test('result ~ expected', function () { const delta = Math.abs(json.result - expected); pm.expect(delta).to.be.below(1e-9); }); } }"
+              ] }
+            }
+          ]
+        },
+        {
+          "name": "Multiply",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"a\": {{a}},\n  \"b\": {{b}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/calculator/multiply", "host": ["{{baseUrl}}"], "path": ["api", "v1", "calculator", "multiply"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "const expectedStatus = pm.iterationData.get('expectStatus') || 200; pm.test('status as expected', function () { pm.response.to.have.status(expectedStatus); });",
+              "if (expectedStatus === 200) { const json = pm.response.json(); const expected = pm.iterationData.get('expected'); if (typeof expected !== 'undefined') { pm.test('result ~ expected', function () { const delta = Math.abs(json.result - expected); pm.expect(delta).to.be.below(1e-9); }); } }"
+            ] } }
+          ]
+        },
+        {
+          "name": "Divide",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"a\": {{a}},\n  \"b\": {{b}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/calculator/divide", "host": ["{{baseUrl}}"], "path": ["api", "v1", "calculator", "divide"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "const expectedStatus = pm.iterationData.get('expectStatus') || 200; pm.test('status as expected', function () { pm.response.to.have.status(expectedStatus); });",
+              "if (expectedStatus === 200) { const json = pm.response.json(); const expected = pm.iterationData.get('expected'); if (typeof expected !== 'undefined') { pm.test('result ~ expected', function () { const delta = Math.abs(json.result - expected); pm.expect(delta).to.be.below(1e-9); }); } }"
+            ] } }
+          ]
+        },
+        {
+          "name": "Divide by zero (400)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"a\": 1,\n  \"b\": 0\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/calculator/divide", "host": ["{{baseUrl}}"], "path": ["api", "v1", "calculator", "divide"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('status 400', function () { pm.response.to.have.status(400); });",
+              "const json = pm.response.json(); pm.test('error detail', function () { pm.expect(json.detail).to.eql('No se puede dividir por cero'); });"
+            ] } }
+          ]
+        },
+        {
+          "name": "Invalid payload (422)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"a\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/calculator/add", "host": ["{{baseUrl}}"], "path": ["api", "v1", "calculator", "add"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('status 422', function () { pm.response.to.have.status(422); });"
+            ] } }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" }
+  ]
+}

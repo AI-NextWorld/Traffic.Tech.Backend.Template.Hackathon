@@ -1,0 +1,8 @@
+[
+  { "a": 4, "b": 2.5, "expected": 10.0 },
+  { "a": -3, "b": 7, "expected": -21 },
+  { "a": 0, "b": 9999, "expected": 0 },
+  { "a": 2, "expectStatus": 422 },
+  { "a": 2, "b": "oops", "expectStatus": 422 },
+  { "b": 5, "expectStatus": 422 }
+]

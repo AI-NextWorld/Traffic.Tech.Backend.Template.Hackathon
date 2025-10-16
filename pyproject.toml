@@ -1,0 +1,23 @@
+[project]
+name = "traffic-tech-backend-template"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "azure-eventhub>=5.15.0",
+    "azure-identity>=1.25.0",
+    "azure-keyvault-secrets>=4.10.0",
+    "confluent-kafka>=2.11.1",
+    "fastapi[standard]>=0.117.1",
+    "psycopg2-binary>=2.9.10",
+    "sqlmodel>=0.0.25",
+]
+
+[dependency-groups]
+dev = [
+    "pylint>=3.3.8",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.13.2",
+]
