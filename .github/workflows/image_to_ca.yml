@@ -58,7 +58,7 @@ jobs:
         # Get the latest image tag for the environment
         LATEST_TAG=$(az acr repository show-tags \
           --name ${{ steps.set-env.outputs.ACR_NAME }} \
-          --repository ${{ env.REPOSITORY_NAME }} \
+          --repository traffic-tech-backend \
           --orderby time_desc \
           --query "[?contains(@, '${{ steps.set-env.outputs.ENVIRONMENT }}-latest')][0]" \
           --output tsv)
@@ -68,7 +68,7 @@ jobs:
           exit 1
         fi
         
-        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/${{ env.REPOSITORY_NAME }}:$LATEST_TAG"
+  FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/traffic-tech-backend:$LATEST_TAG"
         echo "IMAGE_URL=$FULL_IMAGE_URL" >> $GITHUB_OUTPUT
         echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
         
