@@ -47,7 +47,7 @@ jobs:
         echo "REPLICAS=$REPLICAS" >> $GITHUB_OUTPUT
         
         if [[ "$ENVIRONMENT" == "prod" ]]; then
-          echo "ACR_NAME=acrhackatondev2024x7z" >> $GITHUB_OUTPUT
+          echo "ACR_NAME=acrhackatonprod2024x7z" >> $GITHUB_OUTPUT
           echo "AKS_CLUSTER_NAME=aks-prod-cluster" >> $GITHUB_OUTPUT
           echo "RESOURCE_GROUP=rg-np-hack-002" >> $GITHUB_OUTPUT
           echo "NAMESPACE=prod" >> $GITHUB_OUTPUT
