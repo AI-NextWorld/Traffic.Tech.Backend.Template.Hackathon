@@ -23,9 +23,9 @@ on:
         type: string
 
 env:
-  REPOSITORY_NAME: traffic-tech-backend
-  DEPLOYMENT_NAME: traffic-tech-backend
-  SERVICE_NAME: traffic-tech-backend-service
+  REPOSITORY_NAME: traffic-tech-backend # <-- Nombre del repositorio en ACR
+  DEPLOYMENT_NAME: traffic-tech-backend # <-- Nombre del deployment en Kubernetes
+  SERVICE_NAME: traffic-tech-backend-service # <-- Nombre del servicio en Kubernetes
 
 jobs:
   deploy-to-kubernetes:
@@ -49,26 +49,28 @@ jobs:
         echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
         echo "NAMESPACE=$NAMESPACE" >> $GITHUB_OUTPUT
         
+        # <-- Nombres de recursos para dev/prod, cámbialos aquí si tu infraestructura cambia
         if [[ "$ENVIRONMENT" == "prod" ]]; then
-          echo "ACR_NAME=acrhackathonprd001" >> $GITHUB_OUTPUT
-          echo "AKS_CLUSTER_NAME=aks-hackathon-prd-001" >> $GITHUB_OUTPUT
-          echo "RESOURCE_GROUP=rg-hackathon-prd-001" >> $GITHUB_OUTPUT
+          echo "ACR_NAME=acrhackathonprd001" >> $GITHUB_OUTPUT # <-- Nombre del ACR en prod
+          echo "AKS_CLUSTER_NAME=aks-hackathon-prd-001" >> $GITHUB_OUTPUT # <-- Nombre del cluster AKS en prod
+          echo "RESOURCE_GROUP=rg-hackathon-prd-001" >> $GITHUB_OUTPUT # <-- Resource group en prod
         else
-          echo "ACR_NAME=acrhackathondev001" >> $GITHUB_OUTPUT
-          echo "AKS_CLUSTER_NAME=aks-hackathon-dev-001" >> $GITHUB_OUTPUT
-          echo "RESOURCE_GROUP=rg-hackathon-dev-001" >> $GITHUB_OUTPUT
+          echo "ACR_NAME=acrhackathondev001" >> $GITHUB_OUTPUT # <-- Nombre del ACR en dev
+          echo "AKS_CLUSTER_NAME=aks-hackathon-dev-001" >> $GITHUB_OUTPUT # <-- Nombre del cluster AKS en dev
+          echo "RESOURCE_GROUP=rg-hackathon-dev-001" >> $GITHUB_OUTPUT # <-- Resource group en dev
         fi
         
         # Construir el tag completo de la imagen
+        # <-- Lógica para el tag de la imagen, cámbiala si tu convención de tags cambia
         if [[ "$IMAGE_TAG" == "latest" ]]; then
-          FULL_IMAGE_TAG="${ENVIRONMENT}-latest"
+          FULL_IMAGE_TAG="${ENVIRONMENT}-latest" # <-- Tag por defecto: dev-latest o prod-latest
         else
-          FULL_IMAGE_TAG="$IMAGE_TAG"
+          FULL_IMAGE_TAG="$IMAGE_TAG" # <-- Tag personalizado
         fi
         echo "FULL_IMAGE_TAG=$FULL_IMAGE_TAG" >> $GITHUB_OUTPUT
         
         # Construir la URL completa de la imagen
-        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/${{ env.REPOSITORY_NAME }}:${FULL_IMAGE_TAG}"
+        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/${{ env.REPOSITORY_NAME }}:${FULL_IMAGE_TAG}" # <-- URL de la imagen en ACR
         echo "FULL_IMAGE_URL=$FULL_IMAGE_URL" >> $GITHUB_OUTPUT
         
     - name: Azure Login
@@ -177,10 +179,10 @@ jobs:
         spec:
           tls:
           - hosts:
-            - ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com
-            secretName: ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}-tls
+            - ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com # <-- Cambia 'your-domain.com' por tu dominio real
+            secretName: ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}-tls # <-- Nombre del secret TLS
           rules:
-          - host: ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com
+          - host: ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com # <-- Cambia 'your-domain.com' por tu dominio real
             http:
               paths:
               - path: /
