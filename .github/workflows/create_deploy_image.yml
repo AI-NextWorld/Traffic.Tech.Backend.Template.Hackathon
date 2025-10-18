@@ -32,7 +32,7 @@ jobs:
         echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_OUTPUT
         
         if [[ "$ENVIRONMENT" == "prod" ]]; then
-          echo "ACR_NAME=acrhackatondev2024x7z" >> $GITHUB_OUTPUT
+          echo "ACR_NAME=acrhackatonprod2024x7z" >> $GITHUB_OUTPUT
         else
           echo "ACR_NAME=acrhackatondev2024x7z" >> $GITHUB_OUTPUT
         fi
