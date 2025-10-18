@@ -60,7 +60,7 @@ jobs:
           --name ${{ steps.set-env.outputs.ACR_NAME }} \
           --repository traffic-tech-backend \
           --orderby time_desc \
-          --output tsv)
+          --output tsv | tr '\n' ' ')
 
         if [[ -z "$TAGS" ]]; then
           echo "❌ No tags found in repo traffic-tech-backend"
