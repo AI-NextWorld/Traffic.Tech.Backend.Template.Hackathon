@@ -35,12 +35,12 @@ jobs:
         if [[ "$ENVIRONMENT" == "prod" ]]; then
           echo "ACR_NAME=acrhackatonprod2024x7z" >> $GITHUB_OUTPUT
           echo "RESOURCE_GROUP=rg-np-hack-002" >> $GITHUB_OUTPUT
-          echo "CONTAINER_APP_NAME=swa-hackaton-prod" >> $GITHUB_OUTPUT
+          echo "CONTAINER_APP_NAME=ca-prod" >> $GITHUB_OUTPUT
           echo "CONTAINER_APP_ENV=cae-hackathon-prod-002" >> $GITHUB_OUTPUT
         else
           echo "ACR_NAME=acrhackatondev2024x7z" >> $GITHUB_OUTPUT
           echo "RESOURCE_GROUP=rg-np-hack-001" >> $GITHUB_OUTPUT
-          echo "CONTAINER_APP_NAME=ca-traffic-tech-dev-001" >> $GITHUB_OUTPUT
+          echo "CONTAINER_APP_NAME=ca-dev" >> $GITHUB_OUTPUT
           echo "CONTAINER_APP_ENV=cae-hackathon-dev-001" >> $GITHUB_OUTPUT
         fi
         
