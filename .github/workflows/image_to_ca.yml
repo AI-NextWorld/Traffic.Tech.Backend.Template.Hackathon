@@ -67,11 +67,11 @@ jobs:
           echo "❌ No image found with tag pattern '${{ steps.set-env.outputs.ENVIRONMENT }}-latest'"
           exit 1
         fi
-        
-  FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/traffic-tech-backend:$LATEST_TAG"
+
+        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/traffic-tech-backend:$LATEST_TAG"
         echo "IMAGE_URL=$FULL_IMAGE_URL" >> $GITHUB_OUTPUT
         echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
-        
+
         echo "✅ Found latest image: $FULL_IMAGE_URL"
         
     - name: Update Container App
