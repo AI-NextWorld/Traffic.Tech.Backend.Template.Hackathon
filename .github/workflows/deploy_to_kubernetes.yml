@@ -1,0 +1,314 @@
+name: Deploy to Kubernetes (AKS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Choose deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - prod
+      image_tag:
+        description: 'Image tag to deploy (optional, defaults to latest)'
+        required: false
+        default: 'latest'
+        type: string
+      namespace:
+        description: 'Kubernetes namespace (optional)'
+        required: false
+        default: 'default'
+        type: string
+
+env:
+  REPOSITORY_NAME: traffic-tech-backend
+  DEPLOYMENT_NAME: traffic-tech-backend
+  SERVICE_NAME: traffic-tech-backend-service
+
+jobs:
+  deploy-to-kubernetes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set environment variables
+      id: set-env
+      run: |
+        ENVIRONMENT="${{ github.event.inputs.environment }}"
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        NAMESPACE="${{ github.event.inputs.namespace }}"
+        
+        echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_OUTPUT
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "NAMESPACE=$NAMESPACE" >> $GITHUB_OUTPUT
+        
+        if [[ "$ENVIRONMENT" == "prod" ]]; then
+          echo "ACR_NAME=acrhackathonprd001" >> $GITHUB_OUTPUT
+          echo "AKS_CLUSTER_NAME=aks-hackathon-prd-001" >> $GITHUB_OUTPUT
+          echo "RESOURCE_GROUP=rg-hackathon-prd-001" >> $GITHUB_OUTPUT
+        else
+          echo "ACR_NAME=acrhackathondev001" >> $GITHUB_OUTPUT
+          echo "AKS_CLUSTER_NAME=aks-hackathon-dev-001" >> $GITHUB_OUTPUT
+          echo "RESOURCE_GROUP=rg-hackathon-dev-001" >> $GITHUB_OUTPUT
+        fi
+        
+        # Construir el tag completo de la imagen
+        if [[ "$IMAGE_TAG" == "latest" ]]; then
+          FULL_IMAGE_TAG="${ENVIRONMENT}-latest"
+        else
+          FULL_IMAGE_TAG="$IMAGE_TAG"
+        fi
+        echo "FULL_IMAGE_TAG=$FULL_IMAGE_TAG" >> $GITHUB_OUTPUT
+        
+        # Construir la URL completa de la imagen
+        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/${{ env.REPOSITORY_NAME }}:${FULL_IMAGE_TAG}"
+        echo "FULL_IMAGE_URL=$FULL_IMAGE_URL" >> $GITHUB_OUTPUT
+        
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ steps.set-env.outputs.ENVIRONMENT == 'prod' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
+        
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+        
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ steps.set-env.outputs.RESOURCE_GROUP }} \
+          --name ${{ steps.set-env.outputs.AKS_CLUSTER_NAME }} \
+          --overwrite-existing
+          
+    - name: Create namespace if not exists
+      run: |
+        kubectl create namespace ${{ steps.set-env.outputs.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+        
+    - name: Create Kubernetes manifests
+      run: |
+        # Crear el deployment
+        cat <<EOF > deployment.yaml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ${{ env.DEPLOYMENT_NAME }}
+          namespace: ${{ steps.set-env.outputs.NAMESPACE }}
+          labels:
+            app: ${{ env.DEPLOYMENT_NAME }}
+            environment: ${{ steps.set-env.outputs.ENVIRONMENT }}
+        spec:
+          replicas: ${{ steps.set-env.outputs.ENVIRONMENT == 'prod' && 3 || 2 }}
+          selector:
+            matchLabels:
+              app: ${{ env.DEPLOYMENT_NAME }}
+          template:
+            metadata:
+              labels:
+                app: ${{ env.DEPLOYMENT_NAME }}
+                environment: ${{ steps.set-env.outputs.ENVIRONMENT }}
+            spec:
+              containers:
+              - name: ${{ env.DEPLOYMENT_NAME }}
+                image: ${{ steps.set-env.outputs.FULL_IMAGE_URL }}
+                ports:
+                - containerPort: 8000
+                  name: http
+                env:
+                - name: ENVIRONMENT
+                  value: "${{ steps.set-env.outputs.ENVIRONMENT }}"
+                - name: PORT
+                  value: "8000"
+                resources:
+                  requests:
+                    memory: "256Mi"
+                    cpu: "250m"
+                  limits:
+                    memory: "512Mi"
+                    cpu: "500m"
+                livenessProbe:
+                  httpGet:
+                    path: /ping
+                    port: 8000
+                  initialDelaySeconds: 30
+                  periodSeconds: 10
+                readinessProbe:
+                  httpGet:
+                    path: /ping
+                    port: 8000
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+              imagePullSecrets:
+              - name: acr-secret
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: ${{ env.SERVICE_NAME }}
+          namespace: ${{ steps.set-env.outputs.NAMESPACE }}
+          labels:
+            app: ${{ env.DEPLOYMENT_NAME }}
+        spec:
+          selector:
+            app: ${{ env.DEPLOYMENT_NAME }}
+          ports:
+          - port: 80
+            targetPort: 8000
+            protocol: TCP
+            name: http
+          type: ClusterIP
+        ---
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: ${{ env.DEPLOYMENT_NAME }}-ingress
+          namespace: ${{ steps.set-env.outputs.NAMESPACE }}
+          annotations:
+            kubernetes.io/ingress.class: "nginx"
+            nginx.ingress.kubernetes.io/rewrite-target: /
+            cert-manager.io/cluster-issuer: "letsencrypt-prod"
+        spec:
+          tls:
+          - hosts:
+            - ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com
+            secretName: ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}-tls
+          rules:
+          - host: ${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com
+            http:
+              paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: ${{ env.SERVICE_NAME }}
+                    port:
+                      number: 80
+        EOF
+        
+    - name: Create ACR secret
+      run: |
+        # Obtener credenciales del ACR
+        ACR_LOGIN_SERVER="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io"
+        ACR_USERNAME=$(az acr credential show --name ${{ steps.set-env.outputs.ACR_NAME }} --query username -o tsv)
+        ACR_PASSWORD=$(az acr credential show --name ${{ steps.set-env.outputs.ACR_NAME }} --query passwords[0].value -o tsv)
+        
+        # Crear o actualizar el secret para pull de imágenes
+        kubectl create secret docker-registry acr-secret \
+          --namespace=${{ steps.set-env.outputs.NAMESPACE }} \
+          --docker-server=$ACR_LOGIN_SERVER \
+          --docker-username=$ACR_USERNAME \
+          --docker-password=$ACR_PASSWORD \
+          --dry-run=client -o yaml | kubectl apply -f -
+          
+    - name: Deploy to Kubernetes
+      run: |
+        echo "🚀 Deploying to Kubernetes..."
+        kubectl apply -f deployment.yaml
+        
+        echo "⏳ Waiting for deployment to be ready..."
+        kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ steps.set-env.outputs.NAMESPACE }} --timeout=300s
+        
+    - name: Verify deployment
+      id: verify
+      run: |
+        echo "🔍 Verifying deployment..."
+        
+        # Obtener información del deployment
+        REPLICAS_READY=$(kubectl get deployment ${{ env.DEPLOYMENT_NAME }} -n ${{ steps.set-env.outputs.NAMESPACE }} -o jsonpath='{.status.readyReplicas}')
+        REPLICAS_DESIRED=$(kubectl get deployment ${{ env.DEPLOYMENT_NAME }} -n ${{ steps.set-env.outputs.NAMESPACE }} -o jsonpath='{.spec.replicas}')
+        
+        echo "Ready replicas: $REPLICAS_READY/$REPLICAS_DESIRED"
+        
+        if [[ "$REPLICAS_READY" == "$REPLICAS_DESIRED" ]]; then
+          echo "✅ All replicas are ready!"
+          echo "DEPLOYMENT_STATUS=success" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Deployment not fully ready"
+          echo "DEPLOYMENT_STATUS=partial" >> $GITHUB_OUTPUT
+        fi
+        
+        # Obtener la URL del servicio (si hay ingress)
+        INGRESS_IP=$(kubectl get ingress ${{ env.DEPLOYMENT_NAME }}-ingress -n ${{ steps.set-env.outputs.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        
+        if [[ -n "$INGRESS_IP" ]]; then
+          APP_URL="http://$INGRESS_IP"
+          echo "APP_URL=$APP_URL" >> $GITHUB_OUTPUT
+        else
+          APP_URL="http://${{ env.DEPLOYMENT_NAME }}-${{ steps.set-env.outputs.ENVIRONMENT }}.your-domain.com"
+          echo "APP_URL=$APP_URL" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Get service information
+      run: |
+        echo "📋 Service Information:"
+        echo "======================"
+        kubectl get services -n ${{ steps.set-env.outputs.NAMESPACE }} | grep ${{ env.SERVICE_NAME }}
+        
+        echo ""
+        echo "📦 Pod Information:"
+        echo "==================="
+        kubectl get pods -n ${{ steps.set-env.outputs.NAMESPACE }} -l app=${{ env.DEPLOYMENT_NAME }}
+        
+        echo ""
+        echo "🔗 Ingress Information:"
+        echo "======================="
+        kubectl get ingress -n ${{ steps.set-env.outputs.NAMESPACE }} | grep ${{ env.DEPLOYMENT_NAME }} || echo "No ingress found"
+        
+    - name: Health check
+      continue-on-error: true
+      run: |
+        echo "🏥 Performing health check..."
+        
+        # Port forward para hacer health check
+        kubectl port-forward -n ${{ steps.set-env.outputs.NAMESPACE }} service/${{ env.SERVICE_NAME }} 8080:80 &
+        PF_PID=$!
+        
+        sleep 10
+        
+        if curl -f -s http://localhost:8080/ping > /dev/null; then
+          echo "✅ Health check passed!"
+        else
+          echo "⚠️ Health check failed or endpoint not available"
+        fi
+        
+        kill $PF_PID 2>/dev/null || true
+        
+    - name: Deployment Summary
+      run: |
+        echo "## 🚀 Kubernetes Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Environment | \`${{ steps.set-env.outputs.ENVIRONMENT }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| AKS Cluster | \`${{ steps.set-env.outputs.AKS_CLUSTER_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Namespace | \`${{ steps.set-env.outputs.NAMESPACE }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Deployment | \`${{ env.DEPLOYMENT_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Service | \`${{ env.SERVICE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Image | \`${{ steps.set-env.outputs.FULL_IMAGE_URL }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Status | \`${{ steps.verify.outputs.DEPLOYMENT_STATUS }}\` |" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ -n "${{ steps.verify.outputs.APP_URL }}" ]]; then
+          echo "| App URL | [${{ steps.verify.outputs.APP_URL }}](${{ steps.verify.outputs.APP_URL }}) |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Deployment to Kubernetes completed!**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🛠️ Useful Commands" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Check pods" >> $GITHUB_STEP_SUMMARY
+        echo "kubectl get pods -n ${{ steps.set-env.outputs.NAMESPACE }} -l app=${{ env.DEPLOYMENT_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Check logs" >> $GITHUB_STEP_SUMMARY
+        echo "kubectl logs -n ${{ steps.set-env.outputs.NAMESPACE }} -l app=${{ env.DEPLOYMENT_NAME }} --tail=50" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Port forward for local testing" >> $GITHUB_STEP_SUMMARY
+        echo "kubectl port-forward -n ${{ steps.set-env.outputs.NAMESPACE }} service/${{ env.SERVICE_NAME }} 8080:80" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

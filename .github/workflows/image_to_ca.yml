@@ -1,0 +1,143 @@
+name: Deploy to Container App
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Choose deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - prod
+
+env:
+  REPOSITORY_NAME: traffic-tech-backend
+
+jobs:
+  deploy-to-container-app:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set environment variables
+      id: set-env
+      run: |
+        ENVIRONMENT="${{ github.event.inputs.environment }}"
+        echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_OUTPUT
+        
+        if [[ "$ENVIRONMENT" == "prod" ]]; then
+          echo "ACR_NAME=acrhackathonprd001" >> $GITHUB_OUTPUT
+          echo "RESOURCE_GROUP=rg-hackathon-prd-001" >> $GITHUB_OUTPUT
+          echo "CONTAINER_APP_NAME=ca-traffic-tech-prd-001" >> $GITHUB_OUTPUT
+          echo "CONTAINER_APP_ENV=cae-hackathon-prd-001" >> $GITHUB_OUTPUT
+        else
+          echo "ACR_NAME=acrhackathondev001" >> $GITHUB_OUTPUT
+          echo "RESOURCE_GROUP=rg-hackathon-dev-001" >> $GITHUB_OUTPUT
+          echo "CONTAINER_APP_NAME=ca-traffic-tech-dev-001" >> $GITHUB_OUTPUT
+          echo "CONTAINER_APP_ENV=cae-hackathon-dev-001" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ steps.set-env.outputs.ENVIRONMENT == 'prod' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
+        
+    - name: Get latest image tag
+      id: get-image
+      run: |
+        # Login to ACR
+        az acr login --name ${{ steps.set-env.outputs.ACR_NAME }}
+        
+        # Get the latest image tag for the environment
+        LATEST_TAG=$(az acr repository show-tags \
+          --name ${{ steps.set-env.outputs.ACR_NAME }} \
+          --repository ${{ env.REPOSITORY_NAME }} \
+          --orderby time_desc \
+          --query "[?contains(@, '${{ steps.set-env.outputs.ENVIRONMENT }}-latest')][0]" \
+          --output tsv)
+          
+        if [[ -z "$LATEST_TAG" ]]; then
+          echo "❌ No image found with tag pattern '${{ steps.set-env.outputs.ENVIRONMENT }}-latest'"
+          exit 1
+        fi
+        
+        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/${{ env.REPOSITORY_NAME }}:$LATEST_TAG"
+        echo "IMAGE_URL=$FULL_IMAGE_URL" >> $GITHUB_OUTPUT
+        echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
+        
+        echo "✅ Found latest image: $FULL_IMAGE_URL"
+        
+    - name: Update Container App
+      id: deploy
+      run: |
+        # Update the container app with the new image
+        az containerapp update \
+          --name ${{ steps.set-env.outputs.CONTAINER_APP_NAME }} \
+          --resource-group ${{ steps.set-env.outputs.RESOURCE_GROUP }} \
+          --image ${{ steps.get-image.outputs.IMAGE_URL }} \
+          --output table
+          
+        echo "✅ Container App updated successfully!"
+        
+    - name: Get Container App URL
+      id: get-url
+      run: |
+        APP_URL=$(az containerapp show \
+          --name ${{ steps.set-env.outputs.CONTAINER_APP_NAME }} \
+          --resource-group ${{ steps.set-env.outputs.RESOURCE_GROUP }} \
+          --query "properties.configuration.ingress.fqdn" \
+          --output tsv)
+          
+        if [[ -n "$APP_URL" ]]; then
+          echo "APP_URL=https://$APP_URL" >> $GITHUB_OUTPUT
+          echo "✅ Container App URL: https://$APP_URL"
+        else
+          echo "⚠️ Could not retrieve Container App URL"
+        fi
+        
+    - name: Deployment Summary
+      run: |
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Environment | \`${{ steps.set-env.outputs.ENVIRONMENT }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Container App | \`${{ steps.set-env.outputs.CONTAINER_APP_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Resource Group | \`${{ steps.set-env.outputs.RESOURCE_GROUP }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Image | \`${{ steps.get-image.outputs.IMAGE_URL }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Image Tag | \`${{ steps.get-image.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ -n "${{ steps.get-url.outputs.APP_URL }}" ]]; then
+          echo "| App URL | [${{ steps.get-url.outputs.APP_URL }}](${{ steps.get-url.outputs.APP_URL }}) |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Deployment completed successfully!**" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Health Check (Optional)
+      continue-on-error: true
+      run: |
+        if [[ -n "${{ steps.get-url.outputs.APP_URL }}" ]]; then
+          echo "🔍 Performing health check..."
+          
+          # Wait a moment for the deployment to stabilize
+          sleep 30
+          
+          # Try to hit the health endpoint
+          HEALTH_URL="${{ steps.get-url.outputs.APP_URL }}/ping"
+          
+          if curl -f -s "$HEALTH_URL" > /dev/null; then
+            echo "✅ Health check passed: $HEALTH_URL"
+          else
+            echo "⚠️ Health check failed or endpoint not available: $HEALTH_URL"
+          fi
+        else
+          echo "⚠️ Skipping health check - no app URL available"
+        fi
