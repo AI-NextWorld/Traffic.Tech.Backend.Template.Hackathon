@@ -50,41 +50,41 @@ jobs:
         creds: ${{ steps.set-env.outputs.ENVIRONMENT == 'prod' && secrets.AZURE_CREDENTIALS_PROD || secrets.AZURE_CREDENTIALS_DEV }}
         
     - name: Get latest image tag
-      id: get-image
+      id: get-images
       run: |
         # Login to ACR
         az acr login --name ${{ steps.set-env.outputs.ACR_NAME }}
-        
-        # Get the latest image tag for the environment
-        LATEST_TAG=$(az acr repository show-tags \
+
+        # Get all tags from the repo
+        TAGS=$(az acr repository show-tags \
           --name ${{ steps.set-env.outputs.ACR_NAME }} \
           --repository traffic-tech-backend \
           --orderby time_desc \
-          --query "[?contains(@, '${{ steps.set-env.outputs.ENVIRONMENT }}-latest')][0]" \
           --output tsv)
-          
-        if [[ -z "$LATEST_TAG" ]]; then
-          echo "❌ No image found with tag pattern '${{ steps.set-env.outputs.ENVIRONMENT }}-latest'"
+
+        if [[ -z "$TAGS" ]]; then
+          echo "❌ No tags found in repo traffic-tech-backend"
           exit 1
         fi
 
-        FULL_IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/traffic-tech-backend:$LATEST_TAG"
-        echo "IMAGE_URL=$FULL_IMAGE_URL" >> $GITHUB_OUTPUT
-        echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
+        echo "TAGS=$TAGS" >> $GITHUB_OUTPUT
 
-        echo "✅ Found latest image: $FULL_IMAGE_URL"
+        echo "✅ Found tags: $TAGS"
         
     - name: Update Container App
       id: deploy
       run: |
-        # Update the container app with the new image
-        az containerapp update \
-          --name ${{ steps.set-env.outputs.CONTAINER_APP_NAME }} \
-          --resource-group ${{ steps.set-env.outputs.RESOURCE_GROUP }} \
-          --image ${{ steps.get-image.outputs.IMAGE_URL }} \
-          --output table
-          
-        echo "✅ Container App updated successfully!"
+        # Iterar sobre todos los tags y actualizar el Container App con cada imagen
+        for TAG in ${{ steps.get-images.outputs.TAGS }}; do
+          IMAGE_URL="${{ steps.set-env.outputs.ACR_NAME }}.azurecr.io/traffic-tech-backend:$TAG"
+          echo "Deploying image: $IMAGE_URL"
+          az containerapp update \
+            --name ${{ steps.set-env.outputs.CONTAINER_APP_NAME }} \
+            --resource-group ${{ steps.set-env.outputs.RESOURCE_GROUP }} \
+            --image $IMAGE_URL \
+            --output table
+          echo "✅ Container App updated with image: $IMAGE_URL"
+        done
         
     - name: Get Container App URL
       id: get-url
